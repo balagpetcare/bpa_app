@@ -1,14 +1,16 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../services/pet_service.dart';
+import '../../ui/components/app_text_field.dart';
+import '../../ui/components/app_dropdown.dart';
+import '../../ui/components/app_date_field.dart';
+
+import 'widgets/pet_photo_picker.dart';
+import 'widgets/pet_step_header.dart';
 
 class PetProfileWizardScreen extends StatefulWidget {
-  final int? petId; // null => create, not null => edit
+  final int? petId; // null=create, not null=edit
   const PetProfileWizardScreen({super.key, this.petId});
 
   @override
@@ -18,18 +20,20 @@ class PetProfileWizardScreen extends StatefulWidget {
 class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
   final _petService = PetService();
 
-  int _currentStep = 0;
+  final _pageCtrl = PageController();
+  int _current = 0;
   bool _loading = false;
 
-  // Controllers / State
+  // Controllers
   final _nameCtrl = TextEditingController();
   final _microchipCtrl = TextEditingController();
   final _foodCtrl = TextEditingController();
   final _healthCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
-  final _weightCtrl = TextEditingController(); // optional (kg)
+  final _weightCtrl = TextEditingController(); // optional kg
 
-  DateTime? _dob;
+  // State
+  DateTime? _dob; // mandatory
   String _sex = "UNKNOWN";
   bool _isRescue = false;
   bool _isNeutered = false;
@@ -38,25 +42,21 @@ class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
   List<Map<String, dynamic>> _breeds = [];
 
   int? _selectedAnimalTypeId;
-  int? _selectedBreedId;
+  int? _selectedBreedId; // mandatory
 
-  File? _pickedCroppedFile; // local processed image
+  File? _photoFile; // processed file
   bool _photoChanged = false;
 
-  // Validation flags
-  bool _step1Valid() =>
-      (_pickedCroppedFile != null ||
-          widget.petId != null) && // edit mode allows existing photo
+  // Validation (image on 2nd page)
+  bool get _step0BasicValid =>
       _nameCtrl.text.trim().isNotEmpty &&
       _selectedAnimalTypeId != null &&
-      _selectedBreedId != null; // mandatory
+      _selectedBreedId != null;
 
-  bool _step2Valid() => _dob != null; // mandatory DOB
+  bool get _step1ProfileValid =>
+      (_photoFile != null || widget.petId != null) && _dob != null;
 
-  bool _step3Valid() {
-    // food habits recommended required (আপনি চাইলে optional করতে পারেন)
-    return _foodCtrl.text.trim().isNotEmpty;
-  }
+  bool get _step2HabitsValid => _foodCtrl.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -64,27 +64,38 @@ class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
     _initLoad();
   }
 
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    _nameCtrl.dispose();
+    _microchipCtrl.dispose();
+    _foodCtrl.dispose();
+    _healthCtrl.dispose();
+    _notesCtrl.dispose();
+    _weightCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _initLoad() async {
     setState(() => _loading = true);
-
     try {
       _animalTypes = await _petService.getAnimalTypes();
 
       if (widget.petId != null) {
         final pet = await _petService.getPetById(widget.petId!);
 
-        _nameCtrl.text = pet["name"] ?? "";
+        _nameCtrl.text = (pet["name"] ?? "").toString();
         _sex = (pet["sex"] ?? "UNKNOWN").toString();
         _isRescue = (pet["isRescue"] ?? false) == true;
         _isNeutered = (pet["isNeutered"] ?? false) == true;
 
         final dobStr = pet["dateOfBirth"];
-        if (dobStr != null) _dob = DateTime.tryParse(dobStr);
+        if (dobStr != null) _dob = DateTime.tryParse(dobStr.toString());
 
-        _microchipCtrl.text = pet["microchipNumber"] ?? "";
-        _foodCtrl.text = pet["foodHabits"] ?? "";
-        _healthCtrl.text = pet["healthDisorders"] ?? "";
-        _notesCtrl.text = pet["notes"] ?? "";
+        _microchipCtrl.text = (pet["microchipNumber"] ?? "").toString();
+        _foodCtrl.text = (pet["foodHabits"] ?? "").toString();
+        _healthCtrl.text = (pet["healthDisorders"] ?? "").toString();
+        _notesCtrl.text = (pet["notes"] ?? "").toString();
 
         _selectedAnimalTypeId = pet["animalTypeId"];
         _selectedBreedId = pet["breedId"];
@@ -94,61 +105,15 @@ class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
         }
       }
     } catch (e) {
-      _showSnack("Load failed: $e");
+      _snack("Load failed: $e");
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _pickCropCompressImage() async {
-    final picker = ImagePicker();
-    final x = await picker.pickImage(source: ImageSource.gallery);
-    if (x == null) return;
-
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: x.path,
-      compressQuality: 100,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: "Crop Profile Photo",
-          lockAspectRatio: true,
-          aspectRatioPresets: [
-            CropAspectRatioPreset.square, // ✅ 1:1
-          ],
-          hideBottomControls: false,
-        ),
-        IOSUiSettings(
-          title: "Crop Profile Photo",
-          aspectRatioLockEnabled: true,
-          cropStyle: CropStyle.circle, // ✅ iOS ONLY supports circle
-        ),
-      ],
-    );
-
-    if (cropped == null) return;
-
-    // Compress + resize
-    final outPath = "${cropped.path}_500.jpg";
-    final compressedBytes = await FlutterImageCompress.compressWithFile(
-      cropped.path,
-      minWidth: 500,
-      minHeight: 500,
-      quality: 80,
-      format: CompressFormat.jpeg,
-    );
-
-    if (compressedBytes == null) {
-      _showSnack("Image processing failed");
-      return;
-    }
-
-    final f = File(outPath);
-    await f.writeAsBytes(compressedBytes);
-
-    setState(() {
-      _pickedCroppedFile = f;
-      _photoChanged = true;
-    });
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _selectDob() async {
@@ -171,58 +136,69 @@ class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
       _selectedBreedId = null;
       _breeds = [];
     });
+
     if (v == null) return;
 
     try {
       final list = await _petService.getBreeds(v);
-      setState(() => _breeds = list);
+      if (mounted) setState(() => _breeds = list);
     } catch (e) {
-      _showSnack("Breed load failed: $e");
+      _snack("Breed load failed: $e");
     }
+  }
+
+  void _go(int i) {
+    setState(() => _current = i);
+    _pageCtrl.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
   }
 
   void _next() {
-    final canGo = switch (_currentStep) {
-      0 => _step1Valid(),
-      1 => _step2Valid(),
-      2 => _step3Valid(),
+    final ok = switch (_current) {
+      0 => _step0BasicValid,
+      1 => _step1ProfileValid,
+      2 => _step2HabitsValid,
       _ => true,
     };
 
-    if (!canGo) {
-      _showSnack("Please complete required fields in this step.");
+    if (!ok) {
+      _snack("এই স্টেপে Required ফিল্ডগুলো পূরণ করুন।");
       return;
     }
-
-    if (_currentStep < 3) {
-      setState(() => _currentStep++);
-    }
+    if (_current < 3) _go(_current + 1);
   }
 
   void _back() {
-    if (_currentStep > 0) setState(() => _currentStep--);
+    if (_current > 0) _go(_current - 1);
   }
 
   Future<void> _submit() async {
+    if (!_step0BasicValid || !_step1ProfileValid || !_step2HabitsValid) {
+      _snack("Required ফিল্ডগুলো পূরণ করুন।");
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       final payload = {
         "name": _nameCtrl.text.trim(),
         "animalTypeId": _selectedAnimalTypeId,
-        "breedId": _selectedBreedId,
+        "breedId": _selectedBreedId, // mandatory
         "sex": _sex,
-        "dateOfBirth": _dob?.toIso8601String(),
+        "dateOfBirth": _dob?.toIso8601String(), // mandatory
         "microchipNumber": _microchipCtrl.text.trim().isEmpty
             ? null
             : _microchipCtrl.text.trim(),
         "isRescue": _isRescue,
         "isNeutered": _isNeutered,
-        "foodHabits": _foodCtrl.text.trim(),
+        "foodHabits": _foodCtrl.text.trim(), // required
         "healthDisorders": _healthCtrl.text.trim().isEmpty
             ? null
             : _healthCtrl.text.trim(),
         "notes": _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        // Weight optional: backend যদি আলাদা table এ নেয়, তাহলে create pet এর পরে separate endpoint call করবেন
         "weightKg": _weightCtrl.text.trim().isEmpty
             ? null
             : double.tryParse(_weightCtrl.text.trim()),
@@ -236,281 +212,289 @@ class _PetProfileWizardScreenState extends State<PetProfileWizardScreen> {
         await _petService.updatePet(petId, payload);
       }
 
-      // Photo upload if changed
-      if (_photoChanged && _pickedCroppedFile != null) {
-        await _petService.uploadPetPhoto(petId, _pickedCroppedFile!);
+      if (_photoChanged && _photoFile != null) {
+        await _petService.uploadPetPhoto(petId, _photoFile!);
       }
 
       if (!mounted) return;
-      _showSnack("Pet profile saved ✅");
+      _snack("Pet profile saved ✅");
       Navigator.pop(context, true);
     } catch (e) {
-      _showSnack("Submit failed: $e");
+      _snack("Submit failed: $e");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
   @override
   Widget build(BuildContext context) {
+    final titles = const ["Basic", "Profile", "Habits", "Review"];
+    final showBreedWarning =
+        _current == 0 &&
+        _selectedAnimalTypeId != null &&
+        _selectedBreedId == null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.petId == null ? "Register Pet" : "Update Pet"),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Stepper(
-              type: StepperType.horizontal,
-              currentStep: _currentStep,
-              onStepContinue: _currentStep == 3 ? _submit : _next,
-              onStepCancel: _back,
-              controlsBuilder: (context, details) {
-                final isLast = _currentStep == 3;
-                return Row(
-                  children: [
-                    ElevatedButton(
-                      onPressed: details.onStepContinue,
-                      child: Text(isLast ? "Save" : "Next"),
-                    ),
-                    const SizedBox(width: 12),
-                    if (_currentStep > 0)
-                      TextButton(
-                        onPressed: details.onStepCancel,
-                        child: const Text("Back"),
-                      ),
-                  ],
-                );
-              },
-              steps: [
-                Step(
-                  title: const Text("Basic"),
-                  isActive: _currentStep >= 0,
-                  state: _currentStep > 0
-                      ? StepState.complete
-                      : StepState.indexed,
-                  content: _buildStep1(),
+          : Column(
+              children: [
+                PetStepHeader(
+                  current: _current,
+                  titles: titles,
+                  showBreedWarning: showBreedWarning,
                 ),
-                Step(
-                  title: const Text("DOB"),
-                  isActive: _currentStep >= 1,
-                  state: _currentStep > 1
-                      ? StepState.complete
-                      : StepState.indexed,
-                  content: _buildStep2(),
+                Expanded(
+                  child: PageView(
+                    controller: _pageCtrl,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (i) => setState(() => _current = i),
+                    children: [
+                      _stepBasic(), // no photo
+                      _stepProfile(), // photo + dob
+                      _stepHabits(),
+                      _stepReview(),
+                    ],
+                  ),
                 ),
-                Step(
-                  title: const Text("Habits"),
-                  isActive: _currentStep >= 2,
-                  state: _currentStep > 2
-                      ? StepState.complete
-                      : StepState.indexed,
-                  content: _buildStep3(),
-                ),
-                Step(
-                  title: const Text("Review"),
-                  isActive: _currentStep >= 3,
-                  state: StepState.indexed,
-                  content: _buildStep4(),
-                ),
+                _bottomBar(),
               ],
             ),
     );
   }
 
-  Widget _buildStep1() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Center(
-          child: InkWell(
-            onTap: _pickCropCompressImage,
-            child: CircleAvatar(
-              radius: 46,
-              backgroundColor: Colors.grey.shade200,
-              backgroundImage: _pickedCroppedFile != null
-                  ? FileImage(_pickedCroppedFile!)
-                  : null,
-              child: _pickedCroppedFile == null
-                  ? const Icon(Icons.camera_alt, size: 26)
-                  : null,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _nameCtrl,
-          decoration: const InputDecoration(
-            labelText: "Pet Name *",
-            prefixIcon: Icon(Icons.pets),
-          ),
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 12),
-
-        DropdownButtonFormField<int>(
-          value: _selectedAnimalTypeId,
-          items: _animalTypes
-              .map(
-                (e) => DropdownMenuItem<int>(
-                  value: e["id"],
-                  child: Text(e["name"]),
-                ),
-              )
-              .toList(),
-          onChanged: _onAnimalTypeChanged,
-          decoration: const InputDecoration(
-            labelText: "Animal Type *",
-            prefixIcon: Icon(Icons.category),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        DropdownButtonFormField<int>(
-          value: _selectedBreedId,
-          items: _breeds
-              .map(
-                (e) => DropdownMenuItem<int>(
-                  value: e["id"],
-                  child: Text(e["name"]),
-                ),
-              )
-              .toList(),
-          onChanged: (v) => setState(() => _selectedBreedId = v),
-          decoration: const InputDecoration(
-            labelText: "Breed *",
-            prefixIcon: Icon(Icons.badge),
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text("Breed is mandatory, and loads based on Animal Type."),
-      ],
-    );
-  }
-
-  Widget _buildStep2() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.cake),
-          title: Text(
-            _dob == null
-                ? "Select Date of Birth *"
-                : "DOB: ${_dob!.year}-${_dob!.month.toString().padLeft(2, '0')}-${_dob!.day.toString().padLeft(2, '0')}",
-          ),
-          trailing: const Icon(Icons.calendar_month),
-          onTap: _selectDob,
-        ),
-        const SizedBox(height: 12),
-
-        DropdownButtonFormField<String>(
-          value: _sex,
-          items: const [
-            DropdownMenuItem(value: "MALE", child: Text("Male")),
-            DropdownMenuItem(value: "FEMALE", child: Text("Female")),
-            DropdownMenuItem(value: "UNKNOWN", child: Text("Unknown")),
-          ],
-          onChanged: (v) => setState(() => _sex = v ?? "UNKNOWN"),
-          decoration: const InputDecoration(labelText: "Sex"),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _microchipCtrl,
-          decoration: const InputDecoration(
-            labelText: "Microchip Number (Optional)",
-            prefixIcon: Icon(Icons.qr_code),
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _isRescue,
-          onChanged: (v) => setState(() => _isRescue = v),
-          title: const Text("Is Rescue?"),
-        ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _isNeutered,
-          onChanged: (v) => setState(() => _isNeutered = v),
-          title: const Text("Is Neutered?"),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStep3() {
-    return Column(
-      children: [
-        TextField(
-          controller: _foodCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: "Food Habits *",
-            hintText: "e.g. Dry food + chicken, 2 times/day",
-          ),
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _weightCtrl,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: "Weight in KG (Optional)",
-            hintText: "e.g. 4.5",
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _healthCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: "Health Disorders (Optional)",
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        TextField(
-          controller: _notesCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: "Short Description / Notes (Optional)",
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStep4() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _bottomBar() {
+    final isLast = _current == 3;
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+        child: Row(
           children: [
-            Text("Name: ${_nameCtrl.text.trim()}"),
-            Text("AnimalTypeId: ${_selectedAnimalTypeId ?? '-'}"),
-            Text("BreedId: ${_selectedBreedId ?? '-'}"),
-            Text("DOB: ${_dob == null ? '-' : _dob!.toIso8601String()}"),
-            Text("Sex: $_sex"),
-            Text("Rescue: $_isRescue"),
-            Text("Neutered: $_isNeutered"),
-            Text("Food: ${_foodCtrl.text.trim()}"),
-            Text(
-              "Weight: ${_weightCtrl.text.trim().isEmpty ? '-' : _weightCtrl.text.trim()}",
+            Expanded(
+              child: ElevatedButton(
+                onPressed: isLast ? _submit : _next,
+                child: Text(isLast ? "Save" : "Next"),
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text("Press Save to submit."),
+            const SizedBox(width: 12),
+            if (_current > 0)
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _back,
+                  child: const Text("Back"),
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------- Step 0: Basic (Common style components)
+  Widget _stepBasic() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppTextField(
+            controller: _nameCtrl,
+            label: "Pet Name *",
+            prefixIcon: const Icon(Icons.pets),
+            errorText: _nameCtrl.text.trim().isEmpty ? "Required" : null,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+
+          AppDropdown<int>(
+            label: "Animal Type *",
+            value: _selectedAnimalTypeId,
+            prefixIcon: const Icon(Icons.category),
+            items: _animalTypes
+                .map(
+                  (e) => DropdownMenuItem<int>(
+                    value: e["id"],
+                    child: Text(e["name"]),
+                  ),
+                )
+                .toList(),
+            onChanged: _onAnimalTypeChanged,
+            errorText: _selectedAnimalTypeId == null ? "Required" : null,
+          ),
+          const SizedBox(height: 12),
+
+          AppDropdown<int>(
+            label: "Breed *",
+            value: _selectedBreedId,
+            prefixIcon: const Icon(Icons.badge),
+            items: _breeds
+                .map(
+                  (e) => DropdownMenuItem<int>(
+                    value: e["id"],
+                    child: Text(e["name"]),
+                  ),
+                )
+                .toList(),
+            onChanged: _selectedAnimalTypeId == null
+                ? null
+                : (v) => setState(() => _selectedBreedId = v),
+            errorText: _selectedBreedId == null ? "Required" : null,
+            hint: _selectedAnimalTypeId == null
+                ? "Select Animal Type first"
+                : null,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Breed mandatory (Animal Type অনুযায়ী breed লোড হবে).",
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------- Step 1: Profile (Photo + DOB mandatory)
+  Widget _stepProfile() {
+    final dobText = _dob == null
+        ? ""
+        : "${_dob!.year}-${_dob!.month.toString().padLeft(2, '0')}-${_dob!.day.toString().padLeft(2, '0')}";
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        children: [
+          Center(
+            child: PetPhotoPicker(
+              file: _photoFile,
+              onChanged: (f) => setState(() {
+                _photoFile = f;
+                _photoChanged = true;
+              }),
+              onRemove: () => setState(() {
+                _photoFile = null;
+                _photoChanged = true;
+              }),
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          AppDateField(
+            label: "Date of Birth *",
+            valueText: dobText,
+            onTap: _selectDob,
+            errorText: _dob == null ? "Required" : null,
+          ),
+          const SizedBox(height: 12),
+
+          AppDropdown<String>(
+            label: "Sex",
+            value: _sex,
+            prefixIcon: const Icon(Icons.wc),
+            items: const [
+              DropdownMenuItem(value: "MALE", child: Text("Male")),
+              DropdownMenuItem(value: "FEMALE", child: Text("Female")),
+              DropdownMenuItem(value: "UNKNOWN", child: Text("Unknown")),
+            ],
+            onChanged: (v) => setState(() => _sex = v ?? "UNKNOWN"),
+          ),
+          const SizedBox(height: 12),
+
+          AppTextField(
+            controller: _microchipCtrl,
+            label: "Microchip Number (Optional)",
+            prefixIcon: const Icon(Icons.qr_code),
+          ),
+          const SizedBox(height: 10),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _isRescue,
+            onChanged: (v) => setState(() => _isRescue = v),
+            title: const Text("Is Rescue?"),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _isNeutered,
+            onChanged: (v) => setState(() => _isNeutered = v),
+            title: const Text("Is Neutered?"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------- Step 2: Habits
+  Widget _stepHabits() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        children: [
+          AppTextField(
+            controller: _foodCtrl,
+            label: "Food Habits *",
+            hint: "e.g. Dry food + chicken, 2 times/day",
+            maxLines: 2,
+            errorText: _foodCtrl.text.trim().isEmpty ? "Required" : null,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+
+          AppTextField(
+            controller: _weightCtrl,
+            label: "Weight in KG (Optional)",
+            hint: "e.g. 4.5",
+            keyboardType: TextInputType.number,
+            prefixIcon: const Icon(Icons.monitor_weight),
+          ),
+          const SizedBox(height: 12),
+
+          AppTextField(
+            controller: _healthCtrl,
+            label: "Health Disorders (Optional)",
+            maxLines: 2,
+            prefixIcon: const Icon(Icons.health_and_safety),
+          ),
+          const SizedBox(height: 12),
+
+          AppTextField(
+            controller: _notesCtrl,
+            label: "Short Description / Notes (Optional)",
+            maxLines: 3,
+            prefixIcon: const Icon(Icons.notes),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------- Step 3: Review
+  Widget _stepReview() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Name: ${_nameCtrl.text.trim()}"),
+              Text("AnimalTypeId: ${_selectedAnimalTypeId ?? '-'}"),
+              Text("BreedId: ${_selectedBreedId ?? '-'}"),
+              Text("DOB: ${_dob == null ? '-' : _dob!.toIso8601String()}"),
+              Text("Sex: $_sex"),
+              Text("Rescue: $_isRescue"),
+              Text("Neutered: $_isNeutered"),
+              Text("Food: ${_foodCtrl.text.trim()}"),
+              Text(
+                "Weight: ${_weightCtrl.text.trim().isEmpty ? '-' : _weightCtrl.text.trim()}",
+              ),
+              const SizedBox(height: 10),
+              const Text("সব ঠিক থাকলে Save চাপুন ✅"),
+            ],
+          ),
         ),
       ),
     );
