@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
-import 'api_endpoints.dart';
+import '../core/network/api_endpoints.dart';
 
 class AuthService {
   final ApiClient _client = ApiClient();

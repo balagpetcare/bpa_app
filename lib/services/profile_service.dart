@@ -1,5 +1,5 @@
 import 'api_client.dart';
-import 'api_endpoints.dart';
+import '../core/network/api_endpoints.dart';
 
 class ProfileService {
   final ApiClient _client = ApiClient();

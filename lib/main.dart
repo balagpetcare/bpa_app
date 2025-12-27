@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/splash_screen.dart';
+import 'app/router/app_router.dart';
 
 void main() {
   runApp(const BpaApp());
@@ -13,11 +13,9 @@ class BpaApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'BPA App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
-     home: const SplashScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      onGenerateRoute: AppRouter.onGenerateRoute,
+      initialRoute: '/',
     );
   }
 }
