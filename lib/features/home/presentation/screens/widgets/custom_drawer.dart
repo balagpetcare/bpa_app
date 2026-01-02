@@ -98,11 +98,12 @@ class BPACustomDrawer extends StatelessWidget {
                     title: "My Pets (Pet List)",
                     onTap: () => onSelect(BPADrawerDestination.petList),
                   ),
+
                   _drawerTile(
                     context,
                     icon: Icons.add_circle_rounded,
                     title: "Register New Pet",
-                    subtitle: "Create pet profile + photo",
+                    subtitle: "Create pet profile + ",
                     onTap: () => onSelect(BPADrawerDestination.petRegister),
                   ),
 

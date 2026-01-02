@@ -54,4 +54,33 @@ class ProfileService {
     if (res.statusCode == 404) return "Profile not found.";
     return "Failed to load profile. Please try again.";
   }
+
+
+Future<UserProfileModel> updateProfile(Map<String, dynamic> payload) async {
+  final token = await _token();
+  if (token == null) throw Exception("Unauthorized. Please login again.");
+
+  final uri = Uri.parse("${ApiConfig.apiV1}/user/profile");
+
+  final res = await http.patch(
+    uri,
+    headers: {
+      "Authorization": "Bearer $token",
+      "Content-Type": "application/json",
+    },
+    body: jsonEncode(payload),
+  );
+
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw Exception("Profile update failed: ${res.statusCode} ${res.body}");
+  }
+
+  final decoded = jsonDecode(res.body);
+  final data = (decoded["data"] as Map?)?.cast<String, dynamic>();
+  if (data == null) throw Exception("Invalid update response");
+
+  // reuse same parser as getProfile()
+    return UserProfileModel.fromApi(decoded);
+}
+
 }

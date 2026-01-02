@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../domain/entities/pet_entity.dart';
 import '../../domain/usecases/create_pet_usecase.dart';
@@ -101,6 +102,10 @@ class PetFormCubit extends Cubit<PetFormState> {
     if (state.step > 0) emit(state.copyWith(step: state.step - 1, error: null));
   }
 
+  void onPhotoSelected(XFile file) {
+    emit(state.copyWith(photo: file));
+  }
+
   // ---------- Basic
   void setName(String v) => emit(state.copyWith(name: v, error: null));
 
@@ -174,6 +179,7 @@ class PetFormCubit extends Cubit<PetFormState> {
       final pet = PetEntity(
         id: state.petId,
         name: state.name.trim(),
+
         animalTypeId: state.animalTypeId!,
         breedId: state.breedId, // keep optional-safe
         dateOfBirth: _resolveDob(),
@@ -185,6 +191,9 @@ class PetFormCubit extends Cubit<PetFormState> {
         foodHabits: food.isEmpty ? null : food,
         healthDisorders: health.isEmpty ? null : health,
         notes: notes.isEmpty ? null : notes,
+        photo: state.photo != null
+            ? File(state.photo!.path)
+            : null, // ✅ NOW WORKS
       );
 
       int petId;

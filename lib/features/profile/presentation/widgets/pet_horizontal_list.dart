@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
 import '../../../pets/data/models/pet_model.dart';
 
 class PetHorizontalList extends StatelessWidget {
@@ -46,9 +45,9 @@ class PetHorizontalList extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  if (onSeeAll != null)
-                    _ActionText(text: "See All", onTap: onSeeAll),
                   const SizedBox(width: 10),
+
+                  /// ✅ Add New button now uses onAddNew callback
                   _ActionText(text: "Add New +", onTap: onAddNew),
                 ],
               ),

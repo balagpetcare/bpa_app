@@ -1,12 +1,17 @@
+import 'dart:io';
+
 class PetEntity {
-  final int? id; // ✅ create flow এ null হতে পারে
+  final int? id;
   final String name;
 
   final int animalTypeId;
-  final int? breedId; // ✅ Prisma অনুযায়ী optional
+  final int? breedId;
   final int? profilePicId;
 
-  // ✅ UI display fields (optional)
+  // ✅ NEW: local image file (for upload)
+  final File? photo; // 🔥 ADD THIS
+
+  // UI display fields
   final String? animalTypeName;
   final String? breedName;
 
@@ -39,9 +44,10 @@ class PetEntity {
     this.weightKg,
     this.photoUrl,
     this.profilePicId,
+
+    this.photo, // 🔥 ADD THIS
   });
 
-  // ✅ UI friendly getters (আপনার PetHorizontalList এগুলোই ব্যবহার করবে)
   String get animalType => animalTypeName ?? "";
   String get breed => breedName ?? "";
 }

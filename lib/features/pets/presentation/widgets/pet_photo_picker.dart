@@ -1,8 +1,9 @@
 import 'dart:io';
-
-import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:bpa_app/features/pets/presentation/cubit/pet_form_cubit.dart';
 
 class PetPhotoPicker extends StatelessWidget {
   final File? file;
@@ -19,6 +20,7 @@ class PetPhotoPicker extends StatelessWidget {
   Future<void> _pickImage(BuildContext context) async {
     final picker = ImagePicker();
 
+    // 1️⃣ source picker (camera / gallery)
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -47,13 +49,24 @@ class PetPhotoPicker extends StatelessWidget {
 
     if (source == null) return;
 
-    final picked = await picker.pickImage(source: source, imageQuality: 90);
-    if (picked == null) return;
+    // 2️⃣ pick image
+    final XFile? pickedFile = await picker.pickImage(
+      source: source,
+      imageQuality: 90,
+    );
 
-    final cropped = await _cropImage(context, picked.path);
+    if (pickedFile == null) return;
+
+    final CroppedFile? cropped = await _cropImage(context, pickedFile.path);
     if (cropped == null) return;
 
-    onChanged(File(cropped.path));
+    final File croppedFile = File(cropped.path);
+
+    // 4️⃣ update cubit state (🔥 THIS IS IMPORTANT)
+    context.read<PetFormCubit>().onPhotoSelected(XFile(cropped.path));
+
+    // 5️⃣ optional callback for UI preview
+    onChanged(croppedFile);
   }
 
   Future<CroppedFile?> _cropImage(BuildContext context, String path) {

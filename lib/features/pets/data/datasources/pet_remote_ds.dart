@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/api_config.dart';
+import '../../../../core/network/api_endpoints.dart';
+import '../models/pet_model.dart';
 
 class PetRemoteDs {
   Future<String?> _token() async {
@@ -44,10 +45,6 @@ class PetRemoteDs {
 
   // -----------------------------
   // Pets list
-  // Supports multiple shapes:
-  // A) { success:true, data:[...] }
-  // B) { pets:[...] }
-  // C) { data:{ pets:[...] } }
   // -----------------------------
   Future<List<Map<String, dynamic>>> getAllPets() async {
     final res = await http.get(
@@ -57,7 +54,6 @@ class PetRemoteDs {
     if (res.statusCode != 200) throw Exception(res.body);
 
     final data = jsonDecode(res.body);
-
     final list = (data["data"] is List)
         ? data["data"]
         : (data["pets"] ?? data["data"]?["pets"] ?? []);
@@ -66,9 +62,8 @@ class PetRemoteDs {
   }
 
   // -----------------------------
-  // ✅ NEW: Upload media to /api/v1/media/upload
-  // Returns mediaId
-  // Backend expects: upload.single("file")
+  // ✅ Upload media -> returns mediaId
+  // Backend: POST /api/v1/media/upload (field name: file)
   // -----------------------------
   Future<int> uploadMedia(File file) async {
     final t = await _token();
@@ -99,11 +94,7 @@ class PetRemoteDs {
   }
 
   // -----------------------------
-  // Register pet (JSON)
-  // Supports response shapes:
-  // A) { success:true, data:{ id:.. } }
-  // B) { success:true, pet:{ id:.. } }
-  // C) { success:true, data:{ pet:{ id:.. } } }
+  // Register pet (JSON) -> returns petId
   // -----------------------------
   Future<int> registerPet(Map<String, dynamic> payload) async {
     final res = await http.post(
@@ -134,10 +125,9 @@ class PetRemoteDs {
   }
 
   // -----------------------------
-  // ✅ KEY METHOD:
-  // Create pet with optional photo:
+  // ✅ KEY: create pet + optional photo (NO multipart needed)
   // 1) uploadMedia(file) -> mediaId
-  // 2) registerPet(payload with profilePicId)
+  // 2) registerPet(payload + profilePicId)
   // -----------------------------
   Future<int> registerPetWithOptionalPhoto({
     required Map<String, dynamic> payload,
@@ -146,16 +136,11 @@ class PetRemoteDs {
     final finalPayload = <String, dynamic>{...payload};
 
     if (photoFile != null) {
-      debugPrint("Uploading media from: ${photoFile.path}");
-      final mediaId = await uploadMedia(photoFile);
-      debugPrint("Uploaded mediaId: $mediaId");
-      finalPayload["profilePicId"] = mediaId;
-    } else {
-      debugPrint("No photo selected, registering without profilePicId");
+      final mediaId = await uploadMedia(photoFile); // ✅ /media/upload
+      finalPayload["profilePicId"] = mediaId; // ✅ JSON payload এ যাবে
     }
 
-    debugPrint("FINAL REGISTER PAYLOAD: $finalPayload");
-    return registerPet(finalPayload);
+    return registerPet(finalPayload); // ✅ /user/pets/register JSON
   }
 
   // -----------------------------
@@ -171,12 +156,23 @@ class PetRemoteDs {
   }
 
   // -----------------------------
-  // ✅ Optional helper: update pet profilePic after upload
+  // Convenience list model
   // -----------------------------
-  Future<void> updatePetProfilePic({
-    required int petId,
-    required int profilePicId,
-  }) async {
-    await updatePet(petId, {"profilePicId": profilePicId});
+  Future<List<PetModel>> getMyPets() async {
+    final response = await http.get(
+      Uri.parse("${ApiConfig.apiV1}/user/pets/all"),
+      headers: await _authHeaders(json: false),
+    );
+
+    if (response.statusCode != 200) throw Exception(response.body);
+
+    final data = jsonDecode(response.body);
+    final list = (data["data"] is List)
+        ? data["data"]
+        : (data["pets"] ?? data["data"]?["pets"] ?? []);
+
+    return (list as List)
+        .map((e) => PetModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }

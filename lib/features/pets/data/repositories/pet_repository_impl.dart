@@ -38,11 +38,14 @@ class PetRepositoryImpl implements PetRepository {
       healthDisorders: pet.healthDisorders,
       notes: pet.notes,
       weightKg: pet.weightKg,
-      // ✅ allow sending profilePicId if already set in entity
-      profilePicId: pet.profilePicId,
+      profilePicId: pet.profilePicId, // old flow support
     ).toPayload();
 
-    return remote.registerPet(payload);
+    // ✅ NEW: photo pass through (single request pet+photo)
+    return remote.registerPetWithOptionalPhoto(
+      payload: payload,
+      photoFile: pet.photo, // ✅ PetEntity.photo (File?)
+    );
   }
 
   @override
@@ -61,20 +64,19 @@ class PetRepositoryImpl implements PetRepository {
       healthDisorders: pet.healthDisorders,
       notes: pet.notes,
       weightKg: pet.weightKg,
-      // ✅ allow updating profilePicId if set
       profilePicId: pet.profilePicId,
     ).toPayload();
 
     return remote.updatePet(petId, payload);
   }
 
-  // upload only photo -> returns mediaId
+  // upload only photo -> returns mediaId (still supported)
   @override
   Future<int> uploadPetPhoto(File file) {
     return remote.uploadMedia(file);
   }
 
-  // upload photo + update pet
+  // upload photo + update pet (still supported)
   @override
   Future<void> updatePetPhoto(int petId, File file) async {
     final mediaId = await remote.uploadMedia(file);

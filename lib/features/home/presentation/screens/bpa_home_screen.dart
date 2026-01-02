@@ -78,6 +78,9 @@ class _BPAHomeScreenState extends State<BPAHomeScreen> {
       }
     } else {
       setState(() => _selectedIndex = index);
+      if (index == 0) {
+        await _handleRefresh();
+      }
     }
   }
 
@@ -117,6 +120,7 @@ class _BPAHomeScreenState extends State<BPAHomeScreen> {
     switch (dest) {
       case BPADrawerDestination.home:
         setState(() => _selectedIndex = 0);
+        await _handleRefresh();
         return;
 
       case BPADrawerDestination.shop:
@@ -229,7 +233,7 @@ class _BPAHomeScreenState extends State<BPAHomeScreen> {
       ),
       const ShopScreen(),
       const ServicesScreen(),
-      const ProfileScreen(),
+      ProfileScreen(onPetChanged: _handleRefresh),
     ];
 
     return Scaffold(

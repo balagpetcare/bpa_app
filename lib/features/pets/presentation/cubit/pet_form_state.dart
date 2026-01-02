@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class PetFormState {
   final bool loading;
@@ -16,7 +17,7 @@ class PetFormState {
 
   final List<Map<String, dynamic>> animalTypes;
   final int? animalTypeId;
-
+  final XFile? photo; // 🔥 ADD THIS
   final List<Map<String, dynamic>> breeds;
   final int? breedId;
 
@@ -62,6 +63,7 @@ class PetFormState {
     required this.weightKg,
     required this.photoFile,
     required this.photoChanged,
+    this.photo, // 🔥 ADD THIS
   });
 
   // ✅ Use THIS in Cubit super()
@@ -118,6 +120,7 @@ class PetFormState {
     double? weightKg,
     File? photoFile,
     bool? photoChanged,
+    XFile? photo, // 🔥 ADD THIS
   }) {
     return PetFormState(
       loading: loading ?? this.loading,
@@ -142,6 +145,7 @@ class PetFormState {
       weightKg: weightKg ?? this.weightKg,
       photoFile: photoFile ?? this.photoFile,
       photoChanged: photoChanged ?? this.photoChanged,
+      photo: photo ?? this.photo, // 🔥 ADD THIS
     );
   }
 }

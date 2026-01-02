@@ -4,6 +4,7 @@ import '../../data/models/user_profile_model.dart';
 import '../../data/profile_service.dart';
 
 import '../../../pets/presentation/screens/pet_profile_screen.dart';
+import '../../../pets/presentation/pet_create_screen.dart';
 
 import '../widgets/profile_header.dart';
 import '../widgets/user_stats.dart';
@@ -13,7 +14,9 @@ import '../widgets/profile_gallery.dart';
 import '../widgets/profile_quick_actions.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final Future<void> Function()? onPetChanged;
+
+  const ProfileScreen({super.key, this.onPetChanged});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -132,15 +135,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
             onSeeAll: () {},
-            onAddNew: () {},
+            onAddNew: () async {
+              final changed = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PetCreateScreen()),
+              );
+
+              if (changed == true) {
+                await _load();
+                await widget.onPetChanged?.call();
+              }
+            },
           ),
         ),
 
         const SizedBox(height: 14),
 
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
-          child: ProfileQuickActions(),
+          child: ProfileQuickActions(
+            onAddNewPet: () async {
+              final changed = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PetCreateScreen()),
+              );
+
+              if (changed == true) {
+                // refresh profile data
+                await _load();
+                // notify home to refresh
+                await widget.onPetChanged?.call();
+              }
+            },
+          ),
         ),
 
         const SizedBox(height: 14),
